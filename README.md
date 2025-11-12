@@ -12,5 +12,5 @@ Clone
 
 # Run script
     :~Miti-LPE$ ./update.sh 
-or
+- or
     :~Miti-LPE$ bash update.sh
