@@ -11,6 +11,4 @@ Clone
     cd Miti-LPE
 
 # Run script
-    :~Miti-LPE$ ./update.sh 
-- or
-    :~Miti-LPE$ bash update.sh
+    :~Miti-LPE$ ./update.sh
