@@ -20,18 +20,30 @@ fi
 
 set -euo pipefail
 
+# Output mode: minimal by default; set VERBOSE=1 for more
+VERBOSE=${VERBOSE:-0}
+QUIET=$(( VERBOSE ? 0 : 1 ))
+
+# Short icons
+OK_ICON="${GREEN}✓${RESET}"; WARN_ICON="${YELLOW}!${RESET}"; ERR_ICON="${RED}✗${RESET}"; DOT_ICON="${BLUE}•${RESET}"
+
+info() { echo "${DOT_ICON} $*"; }
+ok()   { echo "${OK_ICON} $*"; }
+warn() { echo "${WARN_ICON} $*"; }
+fail() { echo "${ERR_ICON} $*"; }
+
 # Optional tracing: run with TRACE=1 ./update.sh
 [[ "${TRACE:-0}" == "1" ]] && set -x
 
 # Better error context on failure
 trap 'rc=$?; echo "[!] Script berhenti di baris ${LINENO}: ${BASH_COMMAND} (exit ${rc})" >&2; exit $rc' ERR
 
-echo "${BLUE}[*] Update paket sudo & glibc...${RESET}"
+info "apt update"
 
 # Helper: disable a repository by matching pattern in sources files
 disable_repo_by_pattern() {
   local pattern="$1"
-  echo "${BLUE}[i] Menonaktifkan repo yang cocok dengan pola: $pattern${RESET}"
+  info "disable repo pattern: $pattern"
   # .list files (legacy format)
   while IFS= read -r -d '' f; do
     if grep -q "$pattern" "$f" 2>/dev/null; then
@@ -57,33 +69,33 @@ disable_repo_by_pattern() {
 }
 
 # Run apt update; on failure, optionally auto-disable patterns from env and retry (generic, no vendor-specific text)
-if ! sudo apt update; then
-  echo "${RED}[!] apt update gagal. Kemungkinan ada repo pihak ketiga yang bermasalah (Release file hilang/tidak valid).${RESET}" >&2
+if ! { (( QUIET )) && sudo apt-get -qq update || sudo apt update; }; then
+  warn "apt update gagal"
   if [ -n "${AUTO_DISABLE_PATTERNS:-}" ]; then
-    echo "${YELLOW}[i] AUTO_DISABLE_PATTERNS terisi: ${AUTO_DISABLE_PATTERNS}. Menonaktifkan dan coba ulang.${RESET}"
+  info "AUTO_DISABLE_PATTERNS: ${AUTO_DISABLE_PATTERNS}"
     # Split by comma menjadi spasi
     for pattern in ${AUTO_DISABLE_PATTERNS//,/ } ; do
       [ -n "$pattern" ] && disable_repo_by_pattern "$pattern"
     done
-    sudo apt update || { echo "${RED}[!] apt update tetap gagal setelah menonaktifkan pola yang ditentukan.${RESET}"; exit 1; }
+    { (( QUIET )) && sudo apt-get -qq update || sudo apt update; } || { fail "apt update masih gagal"; exit 1; }
   else
-    echo "${YELLOW}[i] Tidak ada pola otomatis untuk dinonaktifkan. Jika Anda tahu repo penyebabnya, jalankan dengan:${RESET}"
-    echo "    AUTO_DISABLE_PATTERNS=\"owner/repo atau domain\" ./update.sh"
-    echo "${YELLOW}Contoh: AUTO_DISABLE_PATTERNS=\"lutris-team/lutris\" ./update.sh${RESET}"
+    warn "set AUTO_DISABLE_PATTERNS='pattern1,pattern2' lalu jalankan ulang"
     exit 1
   fi
 fi
+ok "apt update"
 
-if ! sudo apt-get install --only-upgrade -y sudo libc6; then
-  echo "${RED}[!] Upgrade paket sudo/libc6 gagal. Kemungkinan penyebab: kunci dpkg terkunci, paket tertahan (held), atau konflik dependensi.${RESET}" >&2
-  echo "    Coba selesaikan lalu jalankan ulang skrip. Lihat: sudo dpkg --configure -a; sudo apt -f install" >&2
+info "upgrade sudo+glibc"
+if ! { (( QUIET )) && sudo apt-get -yqq install --only-upgrade sudo libc6 || sudo apt-get -y install --only-upgrade sudo libc6; }; then
+  fail "upgrade sudo/libc6 gagal"
   exit 1
 fi
+ok "upgrade selesai"
 
-echo "${BLUE}[*] Tampilkan versi setelah update...${RESET}"
+info "versi paket"
 dpkg -l sudo libc6 | awk '/^ii/ {print}'
 
-echo "${BLUE}[*] Tambah aturan sudoers membatasi -R (chroot) jika belum...${RESET}"
+info "cek aturan sudoers -R (opsional)"
 RULE=/etc/sudoers.d/no_chroot_option
 if ! sudo test -f "$RULE"; then
   # Catatan: Tidak ada opsi Defaults yang valid untuk menonaktifkan argumen -R (chroot) secara langsung.
@@ -92,13 +104,14 @@ if ! sudo test -f "$RULE"; then
   echo 'Defaults!/usr/bin/sudo !chroot' > "$TMP_RULE"
   if sudo visudo -cf "$TMP_RULE"; then
     sudo install -m 0440 "$TMP_RULE" "$RULE"
+    ok "aturan sudoers ditambahkan"
   else
-    echo "${YELLOW}[!] Aturan sudoers untuk memblok -R tidak valid pada sistem ini. Melewati tanpa mengubah sudoers.${RESET}" >&2
+    warn "aturan sudoers -R tidak valid, lewati"
   fi
   rm -f "$TMP_RULE"
 fi
 
-echo "${BLUE}[*] Opsional: AppArmor deny load NSS dari /tmp (lewati jika tidak pakai AppArmor)...${RESET}"
+info "AppArmor harden sudo (opsional)"
 if systemctl is-active --quiet apparmor; then
   AA_LOCAL=/etc/apparmor.d/local/usr.bin.sudo
   if ! grep -q '/tmp/' "$AA_LOCAL" 2>/dev/null; then
@@ -109,12 +122,8 @@ deny /tmp/** mr,
 deny /var/tmp/** mr,
 deny /dev/shm/** mr,
 EOF"
-    sudo apparmor_parser -r /etc/apparmor.d/usr.bin.sudo || echo "[!] Update AppArmor gagal"
+    sudo apparmor_parser -r /etc/apparmor.d/usr.bin.sudo || warn "update AppArmor gagal"
   fi
 fi
-
-echo "${BLUE}[*] (Opsional) Sarankan mount /tmp dengan nosuid,nodev${RESET}"
-echo "${BLUE}Tambahkan ke /etc/fstab contoh:${RESET}"
-echo "${BLUE}tmpfs /tmp tmpfs rw,nosuid,nodev,relatime 0 0${RESET}"
-
-echo "${GREEN}[*] Selesai. Review manual sudoers untuk aturan khusus lainnya.${RESET}"
+info "saran: mount /tmp nosuid,nodev (opsional)"
+ok "selesai"
