@@ -25,7 +25,7 @@ VERBOSE=${VERBOSE:-0}
 QUIET=$(( VERBOSE ? 0 : 1 ))
 
 # Short icons
-OK_ICON="${GREEN}✓${RESET}"; WARN_ICON="${YELLOW}!${RESET}"; ERR_ICON="${RED}✗${RESET}"; DOT_ICON="${BLUE}•${RESET}"
+OK_ICON="${GREEN}[✓]${RESET}"; WARN_ICON="${YELLOW}[!]${RESET}"; ERR_ICON="${RED}[✗]${RESET}"; DOT_ICON="${BLUE}[•]${RESET}"
 
 info() { echo "${DOT_ICON} $*"; }
 ok()   { echo "${OK_ICON} $*"; }
