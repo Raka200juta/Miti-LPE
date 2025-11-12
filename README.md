@@ -6,11 +6,11 @@ https://github.com/zinzloun/CVE-2025-32463
 
 ---
 # How to run
-Clone first
+Clone
     git clone https://github.com/Raka200juta/Miti-LPE
     cd Miti-LPE
 
-Run script
+# Run script
     :~Miti-LPE$ ./update.sh 
-    or
+or
     :~Miti-LPE$ bash update.sh
